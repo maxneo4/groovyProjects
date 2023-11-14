@@ -73,21 +73,23 @@ and deleted = 0 and guidobjectParent = '${e.guid.toString()}'""".toString()
         listEntityValue += new EV(row.getObject('guidObject').toString(), jsonVal)
     })
     println("listEntityValue.size(): ${listEntityValue.size()}")
-    def dynamicProperties = [:]
-    bks = e.jsonData['bussinessKey']
+    if(listEntityValue.size() > 0){
+        def dynamicProperties = [:]
+        bks = e.jsonData['bussinessKey']
 
-    listEntityValue.each(ev->{
-        dynamicProperties[ev.guid] = [ev.guid]
-        bks.each(bk ->{
-            def valFieldCol = ev.jsonData['fields'][bk['baref']['ref']]
-            def val = valFieldCol != null && valFieldCol.toString().length()>0? valFieldCol : "null"
-            dynamicProperties[ev.guid].add(val)
+        listEntityValue.each(ev->{
+            dynamicProperties[ev.guid] = [ev.guid]
+            bks.each(bk ->{
+                def valFieldCol = ev.jsonData['fields'][bk['baref']['ref']]
+                def val = valFieldCol != null && valFieldCol.toString().length()>0? valFieldCol : "null"
+                dynamicProperties[ev.guid].add(val)
+            })
         })
-    })
-    println("propiedades dinamicas ${dynamicProperties}")
-    def groupBy = listEntityValue.countBy { dynamicProperties[it.guid] }
-    if(listEntityValue.size() > 0)
+        println("propiedades dinamicas ${dynamicProperties}")
+        def groupBy = listEntityValue.countBy { dynamicProperties[it.guid] }
+        println("groupBy=")
         println(groupBy)
+    }
 })
 
 
