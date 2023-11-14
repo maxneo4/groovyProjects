@@ -8,12 +8,6 @@ def xmlFile = new File("C:\\Users\\maxne\\Downloads\\SICOM_20231023_Full_Bex_Pro
 def xmlSlurper = new XmlSlurper()
 def objects = xmlSlurper.parse(xmlFile)
 
-objects.children().forEach(x-> {
-    if(x.Type == "EntityValue" &&  x.children().last().name() == "StringContentResolved"){
-        //println(x.Id)
-        //println(x.StringContentResolved)
-    }
-})
 
 def sql = Sql.newInstance("jdbc:oracle:thin:@vm:1521:orcl", "Sicom", "sa", "oracle.jdbc.driver.OracleDriver")
 
@@ -24,7 +18,7 @@ class Entity {
     Object jsonData
 }
 
-Entity[] listEntity = []
+Map<String, Entity> listEntity = [:]
 def json = new JsonSlurper()
 
 sql.eachRow("select guidobject, objName, fnBA_DB_BlobToClob(objcontentresolved) as resolved from VWBA_CATALOG_BABIZAGICATALOG where objtypename = 'Entity' and deleted = 0", row ->{
@@ -37,9 +31,23 @@ sql.eachRow("select guidobject, objName, fnBA_DB_BlobToClob(objcontentresolved) 
         currentEntity.resolved = jsonVal
         currentEntity.jsonData = json.parseText(jsonVal)
         if(currentEntity.jsonData['bussinessKey']!= null)
-            listEntity += currentEntity
+            listEntity[currentEntity.guid] = currentEntity
     }
 })
+
+class EV {
+    String guid
+    Object jsonData
+    EV(){
+
+    }
+    EV(String guid, Object jsonData){
+        this.guid = guid
+        this.jsonData = jsonData
+    }
+}
+
+Map<String, EV[]> bexEvByParent = [:]
 
 objects.children().forEach(x-> {
     if(x.Type == "Entity" &&  x.children().last().name() == "StringContentResolved"){
@@ -49,35 +57,44 @@ objects.children().forEach(x-> {
         currentEntity.resolved = x.StringContentResolved
         currentEntity.jsonData = x.StringContentResolved
         if(currentEntity.jsonData['bussinessKey']!= null)
-            listEntity += currentEntity
+            listEntity[currentEntity.guid] = currentEntity
+    }
+    if(x.Type == "EntityValue" &&  x.children().last().name() == "StringContentResolved"){
+        def newEV = new EV()
+        newEV.guid = x.Id
+        newEV.jsonData = x.StringContentResolved
+        if(!bexEvByParent.containsKey(x.ParentId)){
+            bexEvByParent[x.ParentId] = [newEV]
+        }else{
+            bexEvByParent[x.ParentId] += newEV
+        }
     }
 })
 
-class EV {
-    String guid
-    Object jsonData
-    EV(String guid, Object jsonData){
-        this.guid = guid
-        this.jsonData = jsonData
-    }
-}
-
-listEntity.each(e -> {
-    EV[] listEntityValue = []
+listEntity.values().each(e -> {
+    Map<String, EV> listEntityValue = [:]
     def statment = """select guidObject, fnBA_DB_BlobToClob(objcontentresolved) as resolved from VWBA_CATALOG_BABIZAGICATALOG where objtypename = 'EntityValue' 
 and deleted = 0 and guidobjectParent = '${e.guid.toString()}'""".toString()
     println("procesando la entidad ${e.name}")
     sql.eachRow(statment, row -> {
         CLOB content = row.getObject('resolved')
         def jsonVal = json.parseText(content.getCharacterStream().getText())
-        listEntityValue += new EV(row.getObject('guidObject').toString(), jsonVal)
+        def guidEv = row.getObject('guidObject').toString()
+        listEntityValue[guidEv] = new EV(guidEv, jsonVal)
     })
+    //add bex EntityValues
+    if(bexEvByParent.containsKey(e.guid)){
+        println("contains EV in bex")
+        bexEvByParent[e.guid].each {
+            listEntityValue[it.guid] = it
+        }
+    }
     println("listEntityValue.size(): ${listEntityValue.size()}")
     if(listEntityValue.size() > 0){
         def dynamicProperties = [:]
         bks = e.jsonData['bussinessKey']
 
-        listEntityValue.each(ev->{
+        listEntityValue.values().each(ev->{
             dynamicProperties[ev.guid] = [ev.guid]
             bks.each(bk ->{
                 def valFieldCol = ev.jsonData['fields'][bk['baref']['ref']]
@@ -86,7 +103,7 @@ and deleted = 0 and guidobjectParent = '${e.guid.toString()}'""".toString()
             })
         })
         println("propiedades dinamicas ${dynamicProperties}")
-        def groupBy = listEntityValue.countBy { dynamicProperties[it.guid] }
+        def groupBy = listEntityValue.values().countBy { dynamicProperties[it.guid] }
         println("groupBy=")
         println(groupBy)
     }
