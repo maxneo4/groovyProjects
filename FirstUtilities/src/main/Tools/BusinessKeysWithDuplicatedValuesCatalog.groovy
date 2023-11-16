@@ -70,7 +70,8 @@ objects.children().forEach(x-> {
         }
     }
 })
-
+//@TODO con entSrc si es Master consultar en la tabla y armar el entityValue segun los valores el BK, como guid del atributo y attribSrc o consultar
+//armando la query de groupBy para ver si tiene duplicados directamente
 listEntity.values().each(e -> {
     Map<String, EV> listEntityValue = [:]
     def statment = """select guidObject, fnBA_DB_BlobToClob(objcontentresolved) as resolved from VWBA_CATALOG_BABIZAGICATALOG where objtypename = 'EntityValue' 
